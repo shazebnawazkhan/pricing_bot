@@ -113,7 +113,7 @@ class QueryCrew:
     def handle(self, input_query: str) -> str:
         crew = self.crew()
         results = crew.kickoff(inputs={"input_query": input_query})
-        return str(results)
+        return str(results.raw)
 
 if __name__ == "__main__":
     # Example use: provide inputs at kickoff time via the inputs dict
