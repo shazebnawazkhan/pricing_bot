@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"my-mcp-server-495272d2": {
+			"url": "http://localhost:8000/filemcp",
+			"type": "http"
+		},
+		"my-mcp-server-28cfb8d5": {
+			"type": "stdio",
+			"command": "python",
+			"args": ["src/mcp/file_server.py"]
+		}
+	},
+	"inputs": []
+}
