@@ -6,18 +6,17 @@ from mcp import StdioServerParameters
 
 
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Dict, Any
 
-# Model for a single row/item
+# Model for a single row/item — allow arbitrary columns
 class ResRow(BaseModel):
-    product_family: object = Field(description="The name of the product family.")
-    #category: str = Field(description="The category the product belongs to.")
-    average_price: object = Field(description="The average price of the products in family.")
-    #in_stock: bool = Field(description="Whether the product is currently in stock (True/False).")
+    # keep a flexible model that can accept any keys returned by SQL queries
+    class Config:
+        extra = "allow"
 
-# Model for the entire table (a list of ResRow)
+# Model for the entire table (a list of rows with arbitrary schema)
 class ResTable(BaseModel):
-    products: List[ResRow] = Field(description="A list of product details, where each item is a row in the table.")
+    products: List[Dict[str, Any]] = Field(description="A list of rows where each item is a dict mapping column names to values.")
 
 
 class QueryCrew:
@@ -145,18 +144,33 @@ class QueryCrew:
         markdown_table = ""
 
         if results.pydantic:
-            # pydantic_instance = results.pydantic # Access the Pydantic object
-            # print(f"Summary: {pydantic_instance.table_summary}\n")
+            # Generic formatting: determine columns from the first row and render a markdown table
+            products = results.pydantic.products
+            if not products:
+                markdown_table = "No rows returned"
+            else:
+                # If rows are Pydantic models, convert them to dicts
+                first = products[0]
+                if isinstance(first, BaseModel):
+                    first = first.dict()
+                # Use the keys of the first row as the table columns (preserves order if available)
+                columns = list(first.keys())
 
-            # Manually format the Pydantic data into a Markdown table in Python
-            markdown_table = "| Product | Average Price |\n"
-            markdown_table += "|---|---|\n"
-            for row in results.pydantic.products:
-                markdown_table += f"| {row.product_family} | {row.average_price} |\n"
+                # Build header
+                markdown_table = "| " + " | ".join(columns) + " |\n"
+                markdown_table += "|" + "|".join(["---"] * len(columns)) + "|\n"
+
+                # Build rows
+                for row in products:
+                    if isinstance(row, BaseModel):
+                        row = row.dict()
+                    values = [str(row.get(c, "")) for c in columns]
+                    markdown_table += "| " + " | ".join(values) + " |\n"
 
             print(markdown_table)
         else:
             # If output_pydantic wasn't used or failed validation, access raw output
+            print("Failed validation, printing raw results:")
             print(results.raw)
             markdown_table = str(results.raw)
         return markdown_table
@@ -165,8 +179,8 @@ class QueryCrew:
 
 if __name__ == "__main__":
     # Example use: provide inputs at kickoff time via the inputs dict
-    input_query = "show me average list_price by product_sub_group from saas_pricing_data3"
-    #input_query = "SELECT product_category, AVG(list_price) AS average_list_price FROM saas_pricing_data3 GROUP BY product_categor"
+    input_query = "show me average list_price by product_family and product_group from saas_pricing_data3"
+    #input_query = "SELECT product_category, AVG(list_price) AS average_list_price FROM saas_pricing_data3 GROUP BY product_category"
     qc = QueryCrew()
     # crew = qc.crew()
     # results = crew.kickoff(inputs={"input_query": input_query})
