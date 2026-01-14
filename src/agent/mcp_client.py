@@ -418,25 +418,27 @@ def demo_interactive(csv_folder: Optional[str] = None):
 
 def demo_scripted(csv_folder: Optional[str] = None):
     client = MCPClient(csv_folder)
-    # dl = client.list_datasets()
-    # print("Datasets:", dl)
+    #dl = client.query("SELECT product_family, AVG(list_price) AS average_list_price FROM saas_pricing_data3 GROUP BY product_family")
+    dl = client.query("SELECT product_family, AVG(list_price) AS average_list_price FROM saas_pricing_data3 GROUP BY product_sub_group")
+    
+    print("Datasets:", dl)
     # for d in dl:
     #     print(f"  {d['name']} ({d['rows']} rows, {len(d['columns'])} columns)")
 
     #agent = CrewAgentFallback(client)
-    agent = SQLAgent()
+    # agent = SQLAgent()
 
-    samples = [
-        "total revenue by month",
-        "count transactions",
-        "average list_price",
-        "show me 10 example rows",
-    ]
+    # samples = [
+    #     "total revenue by month",
+    #     "count transactions",
+    #     "average list_price",
+    #     "show me 10 example rows",
+    # ]
 
-    for s in samples:
-        print(f">>> User: {s}")
-        print(agent.handle(s))
-        print("---")
+    # for s in samples:
+    #     print(f">>> User: {s}")
+    #     print(agent.handle(s))
+    #     print("---")
 
 
 if __name__ == "__main__":

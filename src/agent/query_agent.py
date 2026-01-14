@@ -5,18 +5,41 @@ from crewai_tools import MCPServerAdapter
 from mcp import StdioServerParameters
 
 
+from pydantic import BaseModel, Field
+from typing import List
+
+# Model for a single row/item
+class ResRow(BaseModel):
+    product_family: object = Field(description="The name of the product family.")
+    #category: str = Field(description="The category the product belongs to.")
+    average_price: object = Field(description="The average price of the products in family.")
+    #in_stock: bool = Field(description="Whether the product is currently in stock (True/False).")
+
+# Model for the entire table (a list of ResRow)
+class ResTable(BaseModel):
+    products: List[ResRow] = Field(description="A list of product details, where each item is a row in the table.")
+
+
 class QueryCrew:
-    """Build a simple Crew that runs a single SQL agent task."""
+    """Build a simple Crew that runs a single SQL agent task.
+    
+        2. You must also provide all the SQL queries you run using the tool in the same chronological 
+                order as you run them.
+
+                
+    
+    """
 
     def __init__(self):
         # LLM and tools
 
-        self.llm = LLM(model="ollama/deepseek-r1:1.5b", base_url="http://localhost:11434", temperature=0)
-        #self.scrap_tool = SerperDevTool()
+        #self.llm = LLM(model="ollama/deepseek-r1:1.5b", base_url="http://localhost:11434", temperature=0.9)
+
+        self.llm = LLM(model="gemini/gemini-2.5-flash", temperature=0.7, verbose=True)
+
         self.stdio_params=StdioServerParameters(
             command="python", 
-            args=["D:\\SNK\\codes\\repos\\pricing_bot\\src\\mcp\\file_server.py"],
-            # env={"UV_PYTHON": "3.12", **os.environ},
+            args=["D:\\SNK\\codes\\repos\\pricing_bot\\src\\mcp\\file_server.py"]
         )
 
         self.mcp_server_adapter = None # MCPServerAdapter(server_params=self.stdio_params)
@@ -53,7 +76,7 @@ class QueryCrew:
                 The datasets can be considered as tables in a sqlite database.
                 It offers tools like list datasets, describe dataset, summary of dataset and also run SQL queries on the datasets.
                 The task is to use the MCP server to get information about the datasets available using the tools provided by the MCP server. 
-                One of the tools offered by the MCP server allows to provide custom SQL which can be run on the dataset. 
+                One of the tools offered by the MCP server is query which allows to provide custom SQL as parameter named 'sql' which can be run on the dataset. 
                 Create relevant SQL queries and pass into the tool, and obtain the results from the tool to share as response to the chat.
                 ALso use other tools to leverage the data present in the datasets, to answer the questions or execute
                 the instructions given by the user. Also run the queries you create using the tools to get results 
@@ -67,7 +90,10 @@ class QueryCrew:
                 You can leverage the tools available to fetch schema and column names of the datasets in order to understand the 
                 columns present in certain table.
 
-                I need the data response fetched from the tool to be furnished as answers to the questions of the user. 
+                I need the data response fetched from the tool to be furnished as answers to the questions of the user.
+                The data reseponse must be presented in tabular format with exact column names as provided by the tool.
+                The data must be accurate and precise as per the queries run on the datasets. 
+                Make sure to use the correct Markdown formatting for the data tables.
                 The questions or instructions from the user are available in the input: {input_query}.
                 The questions can request informations like below:
                 1. Data descriptions like columns and their data types in a particular table.
@@ -78,7 +104,7 @@ class QueryCrew:
                 6. Or a combination of above
 
                 You can run the queries using the available 'query' tool from MCP server. The tool takes an SQL query as argument to run the SQL queries and 
-                obtain the results as a pandas dataframe.
+                obtain the results as a pandas dataframe. Return the results obtained from the queries as part of your final answer to the user.
 
                 Some important points to note while creating SQL queries are:
                 1. Always use the full qualified name of tables to avoid errors in the queries.
@@ -93,13 +119,14 @@ class QueryCrew:
 
                 The final answer you give must contain below items: 
                 1. The output from the queries you ran. The output must be presented as tabular data with exact column 
-                names as provided by the tool. 
-                2. You must also provide all the SQL queries you run using the tool in the same chronological 
-                order as you run them.
+                names as provided by the tool. Return the tabular result as per the pydantic Model: ResTable. Do not hallucinate any data.
+                
             """),
             #tools=[self.scrap_tool],
             tools=self.tools,
-            agent=self.sql_agent
+            agent=self.sql_agent,
+            output_pydantic=ResTable,
+            markdown=True,
         )
 
     def crew(self) -> Crew:
@@ -110,16 +137,39 @@ class QueryCrew:
             verbose=True,
         )
     
-    def handle(self, input_query: str) -> str:
+    def handle(self, input_query: str) -> str:  
         crew = self.crew()
         results = crew.kickoff(inputs={"input_query": input_query})
-        return str(results.raw)
+        print("results.pydantic:", results.pydantic)
+    
+        markdown_table = ""
+
+        if results.pydantic:
+            # pydantic_instance = results.pydantic # Access the Pydantic object
+            # print(f"Summary: {pydantic_instance.table_summary}\n")
+
+            # Manually format the Pydantic data into a Markdown table in Python
+            markdown_table = "| Product | Average Price |\n"
+            markdown_table += "|---|---|\n"
+            for row in results.pydantic.products:
+                markdown_table += f"| {row.product_family} | {row.average_price} |\n"
+
+            print(markdown_table)
+        else:
+            # If output_pydantic wasn't used or failed validation, access raw output
+            print(results.raw)
+            markdown_table = str(results.raw)
+        return markdown_table
+        
+
 
 if __name__ == "__main__":
     # Example use: provide inputs at kickoff time via the inputs dict
-    input_query = "show me 10 example rows from the dataset"
+    input_query = "show me average list_price by product_sub_group from saas_pricing_data3"
+    #input_query = "SELECT product_category, AVG(list_price) AS average_list_price FROM saas_pricing_data3 GROUP BY product_categor"
     qc = QueryCrew()
     # crew = qc.crew()
     # results = crew.kickoff(inputs={"input_query": input_query})
     results = qc.handle(input_query)
     print(results)
+    print("Exiting...")

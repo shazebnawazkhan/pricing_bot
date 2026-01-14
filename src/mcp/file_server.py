@@ -129,7 +129,7 @@ class FileServer:
         except Exception as e:
             raise
 
-        rows = df.fillna(None).values.tolist()
+        rows = df.fillna(value=0).values.tolist()
         return QueryResult(columns=list(df.columns), rows=rows)
 
 
